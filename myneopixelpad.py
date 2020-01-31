@@ -4,28 +4,39 @@ import urandom
 import time
 import os
 from light import *
+import th
 
 class MyNeoPixelPad:
-    XY=[
-      [0,15,16,31,32,47,48,63,64,79,80,95,96,111,112,127,128,143,144,159,160,175,176,191,192,207,208,223,224,239,240,255],
-      [1,14,17,30,33,46,49,62,65,78,81,94,97,110,113,126,129,142,145,158,161,174,177,190,193,206,209,222,225,238,241,254],
-      [2,13,18,29,34,45,50,61,66,77,82,93,98,109,114,125,130,141,146,157,162,173,178,189,194,205,210,221,226,237,242,253],
-      [3,12,19,28,35,44,51,60,67,76,83,92,99,108,115,124,131,140,147,156,163,172,179,188,195,204,211,220,227,236,243,252],
-      [4,11,20,27,36,43,52,59,68,75,84,91,100,107,116,123,132,139,148,155,164,171,180,187,196,203,212,219,228,235,244,251],
-      [5,10,21,26,37,42,53,58,69,74,85,90,101,106,117,122,133,138,149,154,165,170,181,186,197,202,213,218,229,234,245,250],
-      [6,9,22,25,38,41,54,57,70,73,86,89,102,105,118,121,134,137,150,153,166,169,182,185,198,201,214,217,230,233,246,249],
-      [7,8,23,24,39,40,55,56,71,72,87,88,103,104,119,120,135,136,151,152,167,168,183,184,199,200,215,216,231,232,247,248]]
+    XY=[[i*8+j if (i%2==0) else i*8+(7-j) for i in range(32)] for j in range(8)]  # 使用了牛逼的list初始化算法。UNUNUNUN
     offcolor=(0,0,0)   # 关闭的颜色，或者背景颜色
     pixnumber=8*32  # pad size
-    colors=[(0,1,0),(0,1,0),(1,0,0),(0,1,0),(0,1,0),(1,0,1),(1,0,1)]  # 一共7个字符，每个字符显示的颜色。
+    timecolors=[
+              [(0,10,0),(0,10,0),(10,0,0),(0,10,0),(0,10,0),(10,0,10),(10,0,10)],  # 一共7个字符，每个字符显示的颜色。
+              [(2,1,3),(2,1,3),(0,0,1),(2,1,3),(2,1,3),(1,0,1),(1,0,1)],  # 一共7个字符，每个字符显示的颜色。
+              [(0,1,4),(0,1,4),(1,0,0),(0,1,4),(0,1,4),(1,0,1),(1,0,1)],  # 一共7个字符，每个字符显示的颜色。
+              [(2,1,8),(2,1,8),(1,0,0),(2,1,8),(2,1,8),(6,1,1),(6,1,1)]]  # 一共7个字符，每个字符显示的颜色。
+              
+    thcolors=[
+            [(0,1,0),(0,1,0),(0,1,0),(0,1,0),(0,0,1),(1,0,1),(1,0,1),(1,0,1),(1,0,1)],  # 一共9个字符，每个字符显示的颜色。
+            [(12,12,12),(12,12,12),(12,12,12),(12,12,12),(24,0,1),(1,0,1),(1,0,12),(1,0,12),(1,0,12)]]  # 一共9个字符，每个字符显示的颜色。
+
+
     def __init__(self,PIN=13,backgroundcolor=(0,0,0)):
         print(" The Neopixel using %s"%PIN)
         self.PIN=PIN  # 对应的PIN，GPIO的
         self.pixels = neopixel.NeoPixel(machine.Pin(self.PIN),self.pixnumber)  # 创建一个Neopixel的对象。
         self.offcolor = backgroundcolor
+        self.lightvalue=readlight()  # read ENV light
+        self.showtimes = 0 # 记录显示的次数，用于时间和温湿度的隔
+        self.cleanflag=""
+        self.clickcount = 0 # 记录click的次数，每click一次，增加一个值。
+        self.clean()
+        self.showrandom()
+        time.sleep_ms(100)
+        self.clean()
  
     def showrandom(self): 
-        print("    Enter random() ")
+        # print("    Enter random() ")
         for i in range(0,self.pixnumber):
             self.pixels[i] = (urandom.getrandbits(2),urandom.getrandbits(2),urandom.getrandbits(2))
         self.pixels.write()
@@ -47,16 +58,11 @@ class MyNeoPixelPad:
     def __small(self,displaynumber='8',xy=(0,0),color=(33,0,10)):
       x,y=xy
       #点阵字体的不亮点
-      NUMBEROFF=[
-             [4,7,10],[0,2,3,5,6,8,9,11,12,14],   # 0,1
-             [3,4,10,11],[3,4,9,10],   # 2,3
-             [1,4,9,10,12,13],[4,5,9,10],   # 4,5
-             [4,5,10],[3,4,6,7,9,10,12,13],   # 6,7
-             [4,10],[4,9,10]]   # 8,9
+      NUMBEROFF={'0':[4,7,10],'1':[0,2,3,5,6,8,9,11,12,14],'2':[3,4,10,11],'3':[3,4,9,10],'4':[1,4,9,10,12,13],'5':[4,5,9,10],'6':[4,5,10],'7':[3,4,6,7,9,10,12,13],'8':[4,10],'9':[4,9,10],':':[0,1,2,3,4,5,6,7,8,9,10,11,12,14],'c':[1,2,3,4,5,10,11]}   
       for i in range(0,5):
           for j in range(0,3):
               onpoint=(i*3)+j
-              if onpoint in NUMBEROFF[int(displaynumber)]:
+              if onpoint in NUMBEROFF[displaynumber]:
                   self.pixels[self.XY[x+i][y+j]]=self.offcolor
               else:
                   self.pixels[self.XY[x+i][y+j]]=color
@@ -65,37 +71,45 @@ class MyNeoPixelPad:
 
     def __large(self,displaynumber='8',xy=(0,0),color=(1,1,1)):
       x,y=xy
+      width=5 ## 系统默认字体宽度为5.
       #点阵字体的不亮点
-      NUMBEROFF=[
-             [0,4,6,7,8,11,12,16,18,22,23,26,27,28,30,34],[0,1,3,4,5,8,9,10,11,13,14,15,16,18,19,20,21,23,24,25,26,28,29,30,34],   # 0,1
-             [0,4,6,7,8,10,11,12,13,15,19,21,22,23,24,26,27,28,29],[5,6,7,8,10,11,12,14,15,16,19,20,21,22,23,26,27,28,30,34],   # 2,3
-             [0,1,2,4,5,6,9,10,12,14,16,17,19,25,26,27,29,30,31,32,34],[6,7,8,9,14,15,16,17,18,20,21,22,23,26,27,28,30,34],   # 4,5
-             [0,1,5,7,8,9,11,12,13,14,19,21,22,23,26,27,28,30,34],[5,6,7,8,10,11,12,14,15,16,18,19,20,21,23,24,25,26,28,29,30,31,33,34],   # 6,7
-             [0,4,6,7,8,11,12,13,15,19,21,22,23,26,27,28,30,34],[0,4,6,7,8,11,12,13,15,20,21,22,23,25,26,27,28,30,34]]   # 8,9
-      if displaynumber == ':':
-          self.pixels[self.XY[x+1][y]]=color;self.pixels[self.XY[x+1][y+1]]=color  #
-          self.pixels[self.XY[x+2][y]]=color;self.pixels[self.XY[x+2][y+1]]=color  #
-          self.pixels[self.XY[x+4][y]]=color;self.pixels[self.XY[x+4][y+1]]=color  #
-          self.pixels[self.XY[x+5][y]]=color;self.pixels[self.XY[x+5][y+1]]=color  #
-          return
+      NUMBEROFF={'0':[0,4,6,7,8,11,12,16,18,22,23,26,27,28,30,34],'1':[0,1,3,4,5,8,9,10,11,13,14,15,16,18,19,20,21,23,24,25,26,28,29,30,34],   # 0,1
+             '2':[0,4,6,7,8,10,11,12,13,15,19,21,22,23,24,26,27,28,29],'3':[5,6,7,8,10,11,12,14,15,16,19,20,21,22,23,26,27,28,30,34],   # 2,3
+             '4':[0,1,2,4,5,6,9,10,12,14,16,17,19,25,26,27,29,30,31,32,34],'5':[6,7,8,9,14,15,16,17,18,20,21,22,23,26,27,28,30,34],   # 4,5
+             '6':[0,1,5,7,8,9,11,12,13,14,19,21,22,23,26,27,28,30,34],'7':[5,6,7,8,10,11,12,14,15,16,18,19,20,21,23,24,25,26,28,29,30,31,33,34],   # 6,7
+             '8':[0,4,6,7,8,11,12,13,15,19,21,22,23,26,27,28,30,34],'9':[0,4,6,7,8,11,12,13,15,20,21,22,23,25,26,27,28,30,34],   # 8,9
+             ':':[0,1,6,7,12,13],'c':[]}   # :,c
+      fontwidth={'0':5,'1':5,'2':5,'3':5,'4':5,'5':5,'6':5,'7':5,'8':5,'9':5,'c':5,':':2}  # 系统默认为5，特殊字符需要特殊宽度，比如：需要2个即可。
       for i in range(0,7):
-          for j in range(0,5):
-              onpoint=(i*5)+j
-              if onpoint in NUMBEROFF[int(displaynumber)]:
+          width=fontwidth[displaynumber]
+          for j in range(0,width):
+              onpoint=(i*width)+j
+              if onpoint in NUMBEROFF[displaynumber]:
                   self.pixels[self.XY[x+i][y+j]]=self.offcolor
               else:   
                   self.pixels[self.XY[x+i][y+j]]=color
 
   
     def getlightcolor(self,index):
-      lightvalue=readlight()
-      #print("get the light value : %s" %(lightvalue))
       # colors=[(0,1,0),(0,1,0),(1,0,0),(0,1,0),(0,1,0),(1,0,1),(1,0,1)]  # 一共7个字符，每个字符显示的颜色。
-      if lightvalue>0 and lightvalue<254:
-        return tuple([i*lightvalue for i in self.colors[index]])
+      timecolorlen=len(self.timecolors)
+      timecolorindex=self.clickcount % timecolorlen  # 或的那组颜色的坐标
+      lightindex=int(self.lightvalue/10)
+      # print(self.lightvalue,timecolorlen,timecolorindex,lightindex)
+      return tuple([int(i*self.lightvalue) for i in self.timecolors[timecolorindex][index]])
+        
+    def getthlightcolor(self,index):
+      thcolorlen=len(self.thcolors)
+      thcolorindex=self.clickcount % thcolorlen  # 或的那组颜色的坐标
+      lightindex=int(self.lightvalue/10)
+      return tuple([int(i*self.lightvalue) for i in self.thcolors[thcolorindex][index]])
       
+    def setlightcolor(self):
+      self.lightvalue=readlight()   # only 1~10 will return 
+
+        
     def showtime_large(self,xy=(0,0),timestring='00:00:00'):
-      print(timestring)
+      # print(timestring)
       x,y=xy   #显示坐标
       self.__large(timestring[0],(x,y),self.getlightcolor(0))
       self.__large(timestring[1],(x,y+6),self.getlightcolor(1))
@@ -108,23 +122,68 @@ class MyNeoPixelPad:
       time.sleep_ms(600)
       self.__large(':',(x,y+12),self.offcolor)
       self.pixels.write()
-  
+
+    # 显示温度和湿度
+    def showth_small(self,xy=(1,0),thstring='00.0c00.0'):
+      #print(thstring)
+      x,y=xy   #显示坐标
+      ########### Temperature
+      self.__small(thstring[0],(x,y),self.getthlightcolor(0))
+      self.__small(thstring[1],(x,y+4),self.getthlightcolor(1))
+      self.__small(thstring[2],(x,y+7),self.getthlightcolor(2))  # .
+      self.__small(thstring[3],(x,y+10),self.getthlightcolor(3))
+      self.__small(thstring[4],(x,y+14),self.getthlightcolor(4))
+      ############# Humidity
+      self.__small(thstring[5],(x,y+18),self.getthlightcolor(5))
+      self.__small(thstring[6],(x,y+22),self.getthlightcolor(6))
+      self.__small(thstring[7],(x,y+25),self.getthlightcolor(7))  # .
+      self.__small(thstring[8],(x,y+28),self.getthlightcolor(8))
+      self.pixels.write()
+      
     def showtime(self):
+      self.setlightcolor()  # get env light
+      if self.cleanflag != 'showtime':
+        self.clean()
+        self.cleanflag='showtime'
+      # self.clean()
       self.showtime_large(timestring=self.nowtime())
 
-
+    def showth(self):
+      self.setlightcolor()  # get env light
+      if self.cleanflag != 'showth':
+        self.clean()
+        self.cleanflag='showth'
+      thstring="{:0>2.1f}c{:2.1f}".format(th.temperature(),th.humidity())
+      self.showth_small(thstring=thstring.replace(".",":"))
+      
+    def showtimeandth(self):
+      if self.showtimes % 5 == 0:
+        self.showth()
+      else:
+        self.showtime()
+      self.showtimes+=1
+    
+    def onclick(self):
+      self.clickcount+=1
+      print("on click :", self.clickcount)
   
 if __name__=='__main__':
   myneopixelpad=MyNeoPixelPad(23)
   myneopixelpad.clean()
   
+  myneopixelpad.showth()
+  time.sleep(1)
   myneopixelpad.showtime()
-  
   time.sleep(10)
   myneopixelpad.clean()
   myneopixelpad.showrandom()
   time.sleep(1)
   myneopixelpad.clean()
+
+
+
+
+
 
 
 

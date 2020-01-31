@@ -1,3 +1,4 @@
+# -*- coding: UTF-8 -*-
 from machine import ADC,Pin
 
 light_sensor=ADC(Pin(34))
