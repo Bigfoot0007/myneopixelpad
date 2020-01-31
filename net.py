@@ -1,4 +1,4 @@
-
+# -*- coding: UTF-8 -*-
 import time
 # from machine import Pin RTC
 import machine
